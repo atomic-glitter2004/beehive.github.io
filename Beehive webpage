@@ -1,1 +1,123 @@
+//This code has formating issues as it is directly copied from audrino, its just a demonstraition of how my physical system works, basically. This is the first version of my code, please give any a
+  #include <WiFi.h>
+  #include <PubSubClient.h>
+  // WiFi Credentials
+  #include "HX711.h"
+  #include <SimpleDHT.h>
+int pinDHT11 = 4;
+SimpleDHT11 dht11(pinDHT11);
+HX711 scale;
+//  adjust pins if needed
+uint8_t dataPin = 18;
+uint8_t clockPin = 19;
+uint32_t start, stop;
+volatile float f;
+// MQTT Broker Settings, basically MQTT is like a broadcadting system where my sensors send information and my online processes information
+const char *mqtt_broker = "broker.emqx.io";
+const char *mqtt_topic = "bee";
+const char *mqtt_username = "emqx";
+const char *mqtt_password = "public";
+const int mqtt_port = 1883;
 
+// WiFi set up, "beepersonalprojetc" represent's my phone's hotspot
+const char* ssid = "beepersonalproject";//this means the wifi's name
+const char* password = "beepersonalproject";//this means the wifi's passcode
+WiFiClient espClient;
+PubSubClient mqtt_client(espClient);
+
+// Function Declarations or say basic setups
+void connectToWiFi();
+void connectToMQTT();
+void mqttCallback(char *mqtt_topic, byte *payload, unsigned int length);
+void setup() {
+    Serial.begin(115200);
+    connectToWiFi();
+    mqtt_client.setServer(mqtt_broker, mqtt_port);
+    mqtt_client.setKeepAlive(60);
+    mqtt_client.setCallback(mqttCallback); // Corrected callback function name
+    connectToMQTT();
+    Serial.begin(115200);
+  Serial.println(__FILE__);
+  Serial.print("HX711_LIB_VERSION: ");
+  Serial.println(HX711_LIB_VERSION);
+  Serial.println()
+  scale.begin(dataPin, clockPin);
+
+//This part if the calibration of my system or say initialization to make sure it measures the correct weight
+  //  load cell factor 5 KG
+  scale.set_scale(420.0983);
+  //  reset the scale to zero = 0
+  scale.tare();
+  Serial.println("\nPERFORMANCE");
+  start = micros();
+  f = 0;
+  for (int i = 0; i < 100; i++)
+  {
+    f = scale.read_median(7);
+  }
+  stop = micros();
+  Serial.print("100x read_median(7) = ");
+  Serial.println(stop - start);
+  Serial.print("  VAL: ");
+  Serial.println(f, 2);
+}
+
+void connectToWiFi() {
+    WiFi.begin(ssid, password);
+    Serial.print("Connecting to WiFi");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("\nConnected to WiFi");
+}
+void connectToMQTT() {
+    while (!mqtt_client.connected()) {
+        String client_id = "esp32-client-" + String(WiFi.macAddress());
+        Serial.printf("Connecting to MQTT Broker as %s.....\n", client_id.c_str());
+        if (mqtt_client.connect(client_id.c_str(), mqtt_username, mqtt_password)) {
+            Serial.println("Connected to MQTT broker");
+            mqtt_client.subscribe(mqtt_topic);
+            mqtt_client.publish(mqtt_topic, "Hi EMQX I'm ESP32 ^^"); // Publish message upon successful connection
+        } else {
+            Serial.print("Failed, rc=");
+            Serial.print(mqtt_client.state());
+            Serial.println(" try again in 5 seconds");
+            delay(5000);
+        }
+    }
+}
+void mqttCallback(char *mqtt_topic, byte *payload, unsigned int length) {
+    Serial.print("Message received on mqtt_topic: ");    
+    Serial.println(mqtt_topic);   
+    Serial.print("Message: ");   
+    for (unsigned int i = 0; i < length; i++) {
+        Serial.print((char) payload[i]);
+    }
+    Serial.println("\n-----------------------");
+}
+
+void loop() {
+  if (!mqtt_client.connected()) {
+        connectToMQTT();
+    }
+    byte temperature = 0;
+    byte humidity = 0;
+  int err = SimpleDHTErrSuccess;
+  if ((err = dht11.read(&temperature, &humidity, NULL)) != SimpleDHTErrSuccess) {
+    Serial.print("Read DHT11 failed, err="); Serial.print(SimpleDHTErrCode(err));
+    Serial.print(","); Serial.println(SimpleDHTErrDuration(err)); delay(1000);
+    return;
+  }
+  Serial.print((int)temperature); Serial.print(" *C, "); 
+  Serial.print((int)humidity); Serial.println(" H");
+  f = scale.read_median(7);
+  Serial.print("weight: ");
+  Serial.println(f);
+  delay(2000);
+  mqtt_client.loop();
+  String temperatureString = String(temperature)+" "+String(humidity)+" "+String(f);
+  mqtt_client.publish(mqtt_topic, temperatureString.c_str());
+  //mqtt_client.publish(mqtt_topic, humidity);
+  //mqtt_client.publish(mqtt_topic, f);
+}
