@@ -1,5 +1,5 @@
 //This code has formating issues as it is directly copied from audrino, its just a demonstraition of how my physical system works, basically. This is the first version of my code, please give any a
-
+// update1.0(no code update): the wight sensor would have to be changed inorder for it to be placed at the bottom of hives with multiple layers. Calibaration could be easier as functioning are different
   #include <WiFi.h>
   #include <PubSubClient.h>
   // WiFi Credentials
@@ -26,6 +26,8 @@ const char* password = "beepersonalproject";//this means the wifi's passcode
 WiFiClient espClient;
 PubSubClient mqtt_client(espClient);
 
+//update1.0: eventrually this setup would need to be conducted on a internet setting so any device connected on the hosting internet would be able to access the dashboard too but need to be  set up in django file to host wepbage
+
 // Function Declarations or say basic setups
 void connectToWiFi();
 void connectToMQTT();
@@ -46,6 +48,7 @@ void setup() {
 
 //This part if the calibration of my system or say initialization to make sure it measures the correct weight
   //  load cell factor 5 KG
+//update1.0: load cell would evenrtaully need to be able to carry 50kg, or even more. This includes the box weight, raw wax weight, etc. The higher the capactity the better
   scale.set_scale(420.0983);
   //  reset the scale to zero = 0
   scale.tare();
@@ -122,3 +125,4 @@ void loop() {
   //mqtt_client.publish(mqtt_topic, humidity);
   //mqtt_client.publish(mqtt_topic, f);
 }
+//update1.0: if possible, it would be better to average out the data for the timespan chosen, for example averaged 100 data from 10 seconds, or etc. This helps inprove accuracy. Anomolies would need to be somehow eliminated aswell
